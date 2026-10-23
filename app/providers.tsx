@@ -1,7 +1,7 @@
 "use client";
 
-import { base } from "wagmi/chains";
-import type { ReactNode } from "react";
+import { base, mainnet } from "wagmi/chains";
+import { useEffect, useState, type ReactNode } from "react";
 import { WagmiProvider, http, fallback, createConfig } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -25,19 +25,34 @@ const DATA_SUFFIX = Attribution.toDataSuffix({
   codes: ["bc_uzb9vqpt"],
 });
 
-const rpcTransports = fallback([
-  http("https://base-mainnet.g.alchemy.com/v2/R11AN4bze2Uyhg3V6KZ7m"),
-  http(
-    "https://lb.drpc.live/base/AoBzi9hc10ZYuXKhr5g4Uz-ksgFoq00R8LjmQrxF2MGT"
-  ),
-]);
+const baseTransports = fallback(
+  [
+    process.env.NEXT_PUBLIC_BASE_RPC_PRIMARY
+      ? http(process.env.NEXT_PUBLIC_BASE_RPC_PRIMARY)
+      : null,
+    process.env.NEXT_PUBLIC_BASE_RPC_FALLBACK
+      ? http(process.env.NEXT_PUBLIC_BASE_RPC_FALLBACK)
+      : null,
+    http("https://mainnet.base.org"),
+    http("https://base.llamarpc.com"),
+    http("https://1rpc.io/base"),
+  ].filter((t): t is ReturnType<typeof http> => Boolean(t)),
+);
 
-// 1️⃣ Project ID
+const mainnetTransports = fallback(
+  [
+    process.env.NEXT_PUBLIC_ETH_RPC_URL
+      ? http(process.env.NEXT_PUBLIC_ETH_RPC_URL)
+      : null,
+    http("https://cloudflare-eth.com"),
+    http("https://eth.llamarpc.com"),
+  ].filter((t): t is ReturnType<typeof http> => Boolean(t)),
+);
+
 const projectId =
   process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ||
   "f4be81876ed5bc310bbc1b67612831c3";
 
-// 2️⃣ Wallet connectors
 const connectors = connectorsForWallets(
   [
     {
@@ -53,28 +68,53 @@ const connectors = connectorsForWallets(
   {
     appName: "flooor.fun",
     projectId,
-  }
+  },
 );
 
-// 3️⃣ Wagmi config
-const config = createConfig({
-  chains: [base],
+export const wagmiConfig = createConfig({
+  chains: [base, mainnet],
   connectors: [...connectors, farcasterMiniApp()],
-  transports: { [base.id]: rpcTransports },
+  transports: {
+    [base.id]: baseTransports,
+    [mainnet.id]: mainnetTransports,
+  },
   dataSuffix: DATA_SUFFIX,
   ssr: true,
 });
 
-const queryClient = new QueryClient();
-
 export function Providers({ children }: { children: ReactNode }) {
-  // ✅ Farcaster splash screen kapatma
-  if (typeof window !== "undefined") {
-    sdk?.actions?.ready?.();
-  }
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            staleTime: 15_000,
+            retry: 2,
+          },
+        },
+      }),
+  );
+
+  useEffect(() => {
+    let active = true;
+    const notifyReady = async () => {
+      try {
+        if (active) {
+          await sdk?.actions?.ready?.();
+        }
+      } catch {
+        // Ignore outside Farcaster Mini App container
+      }
+    };
+    notifyReady();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
-    <WagmiProvider config={config}>
+    <WagmiProvider config={wagmiConfig}>
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           initialChain={base}
