@@ -6,7 +6,6 @@
     "version": "1",
     "imageUrl": "https://flooor.fun/bg.png",
     "subtitle": "Royalties to the community.",
-    "webhookUrl": "https://flooor.fun/api/webhook",
     "description": "A game-theory NFT marketplace where holders collect daily royalties.",
     "splashImageUrl": "https://flooor.fun/splash.png",
     "primaryCategory": "finance",
